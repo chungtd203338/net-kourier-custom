@@ -24,10 +24,18 @@ import (
 
 	// This defines the shared main for injected controllers.
 	"knative.dev/pkg/injection/sharedmain"
+	"log"
+	// "math/rand"
+	// "github.com/davecgh/go-spew/spew"
+	// bonalib "knative.dev/net-kourier/pkg/bonalib"
 )
 
 func main() {
+	log.Printf("0---Konnichiwa")
+	// rand.NewSource(1)
+
 	ctx := informerfiltering.GetContextWithFilteringLabelSelector(signals.NewContext())
 	ctx = sharedmain.WithHealthProbesDisabled(ctx)
+
 	sharedmain.MainWithContext(ctx, config.ControllerName, kourierIngressController.NewController)
 }

@@ -44,15 +44,25 @@ import (
 	"knative.dev/pkg/kmeta"
 	"knative.dev/pkg/logging"
 	"knative.dev/pkg/tracker"
+
+	"knative.dev/net-kourier/pkg/bonalib"
 )
+
+var _ = bonalib.Baka()
 
 type translatedIngress struct {
 	name                    types.NamespacedName
 	sniMatches              []*envoy.SNIMatch
 	clusters                []*v3.Cluster
 	externalVirtualHosts    []*route.VirtualHost
+	externalVirtualHostsCloud []*route.VirtualHost
+	externalVirtualHostsEdge []*route.VirtualHost
 	externalTLSVirtualHosts []*route.VirtualHost
+	externalTLSVirtualHostsCloud []*route.VirtualHost
+	externalTLSVirtualHostsEdge []*route.VirtualHost
 	internalVirtualHosts    []*route.VirtualHost
+	internalVirtualHostsCloud    []*route.VirtualHost
+	internalVirtualHostsEdge    []*route.VirtualHost
 }
 
 type IngressTranslator struct {
@@ -78,14 +88,14 @@ func NewIngressTranslator(
 func (translator *IngressTranslator) translateIngress(ctx context.Context, ingress *v1alpha1.Ingress, extAuthzEnabled bool) (*translatedIngress, error) {
 	logger := logging.FromContext(ctx)
 
-	sniMatches := make([]*envoy.SNIMatch, 0, len(ingress.Spec.TLS))
-	for _, ingressTLS := range ingress.Spec.TLS {
-		if err := trackSecret(translator.tracker, ingressTLS.SecretNamespace, ingressTLS.SecretName, ingress); err != nil {
+	sniMatches := make([]*envoy.SNIMatch, 0, len(ingress.Spec.TLS)) // bonalog: len(ingress.Spec.TLS) == 0
+	for _, ingressTLS := range ingress.Spec.TLS { // bonalog: not loop
+		if err := trackSecret(translator.tracker, ingressTLS.SecretNamespace, ingressTLS.SecretName, ingress); err != nil { // bonalog: False
 			return nil, err
 		}
 
 		secret, err := translator.secretGetter(ingressTLS.SecretNamespace, ingressTLS.SecretName)
-		if err != nil {
+		if err != nil { // bonalog: False
 			return nil, fmt.Errorf("failed to fetch secret: %w", err)
 		}
 
@@ -95,7 +105,7 @@ func (translator *IngressTranslator) translateIngress(ctx context.Context, ingre
 			secret.Data[certFieldInSecret],
 			secret.Data[keyFieldInSecret],
 		)
-		if err != nil {
+		if err != nil { // bonalog: False
 			return nil, fmt.Errorf("invalid secret is specified: %w", err)
 		}
 
@@ -111,40 +121,56 @@ func (translator *IngressTranslator) translateIngress(ctx context.Context, ingre
 	}
 
 	internalHosts := make([]*route.VirtualHost, 0, len(ingress.Spec.Rules))
+	internalHostsCloud := make([]*route.VirtualHost, 0, len(ingress.Spec.Rules))
+	internalHostsEdge := make([]*route.VirtualHost, 0, len(ingress.Spec.Rules))
 	externalHosts := make([]*route.VirtualHost, 0, len(ingress.Spec.Rules))
+	externalHostsCloud := make([]*route.VirtualHost, 0, len(ingress.Spec.Rules))
+	externalHostsEdge := make([]*route.VirtualHost, 0, len(ingress.Spec.Rules))
 	externalTLSHosts := make([]*route.VirtualHost, 0, len(ingress.Spec.Rules))
-	clusters := make([]*v3.Cluster, 0, len(ingress.Spec.Rules))
-
-	for i, rule := range ingress.Spec.Rules {
+	externalTLSHostsCloud := make([]*route.VirtualHost, 0, len(ingress.Spec.Rules))
+	externalTLSHostsEdge := make([]*route.VirtualHost, 0, len(ingress.Spec.Rules))
+	clusters := make([]*v3.Cluster, 0, len(ingress.Spec.Rules)) // bonalog: len(ingress.Spec.Rules) == 2
+	// one rule is for in-cluster traffic
+	// one rule is for external traffic
+	for i, rule := range ingress.Spec.Rules { // bonalog: loop 2 times
 		ruleName := fmt.Sprintf("(%s/%s).Rules[%d]", ingress.Namespace, ingress.Name, i)
+		// bonalog: ruleName == (default/hello).Rules[0], (default/hello).Rules[1]
 
 		routes := make([]*route.Route, 0, len(rule.HTTP.Paths))
+		routesCloud := make([]*route.Route, 0, len(rule.HTTP.Paths))
+		routesEdge := make([]*route.Route, 0, len(rule.HTTP.Paths))
 		tlsRoutes := make([]*route.Route, 0, len(rule.HTTP.Paths))
-		for _, httpPath := range rule.HTTP.Paths {
+		// bonalog: len(rule.HTTP.Paths) == 2
+		for _, httpPath := range rule.HTTP.Paths { // loop 2 times
 			// Default the path to "/" if none is passed.
-			path := httpPath.Path
-			if path == "" {
+			path := httpPath.Path // path == ""
+			if path == "" { // bonalog: True
 				path = "/"
 			}
 
 			pathName := fmt.Sprintf("%s.Paths[%s]", ruleName, path)
+			// pathName == (default/hello).Rules[0].Paths[/]
 
 			wrs := make([]*route.WeightedCluster_ClusterWeight, 0, len(httpPath.Splits))
-			for _, split := range httpPath.Splits {
+			wrsCloud := make([]*route.WeightedCluster_ClusterWeight, 0, len(httpPath.Splits))
+			wrsEdge := make([]*route.WeightedCluster_ClusterWeight, 0, len(httpPath.Splits))
+			for _, split := range httpPath.Splits { // loop 1 time
+				// bonalib.Log("split", split)
 				// The FQN of the service is sufficient here, as clusters towards the
 				// same service are supposed to be deduplicated anyway.
 				splitName := fmt.Sprintf("%s/%s", split.ServiceNamespace, split.ServiceName)
+				// splitName == default/hello-00001
 
-				if err := trackService(translator.tracker, split.ServiceNamespace, split.ServiceName, ingress); err != nil {
+				if err := trackService(translator.tracker, split.ServiceNamespace, split.ServiceName, ingress); err != nil { // bonalog: FALSE
 					return nil, err
 				}
 
 				service, err := translator.serviceGetter(split.ServiceNamespace, split.ServiceName)
-				if apierrors.IsNotFound(err) {
+				if apierrors.IsNotFound(err) { // bonalog: FALSE
 					logger.Warnf("Service '%s/%s' not yet created", split.ServiceNamespace, split.ServiceName)
 					// TODO(markusthoemmes): Find out if we should actually `continue` here.
 					return nil, nil
-				} else if err != nil {
+				} else if err != nil { // bonalog: FALSE
 					return nil, fmt.Errorf("failed to fetch service '%s/%s': %w", split.ServiceNamespace, split.ServiceName, err)
 				}
 
@@ -156,47 +182,58 @@ func (translator *IngressTranslator) translateIngress(ctx context.Context, ingre
 					http2         = false
 					httpsPortUsed = false
 				)
-				for _, port := range service.Spec.Ports {
-					if port.Port == split.ServicePort.IntVal || port.Name == split.ServicePort.StrVal {
+				for _, port := range service.Spec.Ports { // loop 2 times
+					if port.Port == split.ServicePort.IntVal || port.Name == split.ServicePort.StrVal { // bonalog: True
 						externalPort = port.Port
 						targetPort = port.TargetPort.IntVal
 					}
-					if port.Name == "http2" || port.Name == "h2c" {
+					if port.Name == "http2" || port.Name == "h2c" { // bonalog: false
 						http2 = true
 					}
-					if port.Port == split.ServicePort.IntVal && port.Name == "https" {
+					if port.Port == split.ServicePort.IntVal && port.Name == "https" { // bonalog: false
 						httpsPortUsed = true
 					}
 				}
+				// port.Port == 80 || 443
+				// if port.Port == 80:
+					// externalPort == 80
+					// targetPort == 8012
 
 				// Disable HTTP2 if the annotation is specified.
-				if strings.EqualFold(pkgconfig.GetDisableHTTP2(ingress.Annotations), "true") {
+				if strings.EqualFold(pkgconfig.GetDisableHTTP2(ingress.Annotations), "true") { // bonalog: false
 					http2 = false
 				}
 
 				var (
+					publicLbEndpointsCloud []*endpoint.LbEndpoint
+					publicLbEndpointsEdge []*endpoint.LbEndpoint
 					publicLbEndpoints []*endpoint.LbEndpoint
 					typ               v3.Cluster_DiscoveryType
 				)
-				if service.Spec.Type == corev1.ServiceTypeExternalName {
+				if service.Spec.Type == corev1.ServiceTypeExternalName { // bonalog: false
 					// If the service is of type ExternalName, we add a single endpoint.
 					typ = v3.Cluster_LOGICAL_DNS
 					publicLbEndpoints = []*endpoint.LbEndpoint{
 						envoy.NewLBEndpoint(service.Spec.ExternalName, uint32(externalPort)),
 					}
-				} else {
+					bonalib.Log("", publicLbEndpoints)
+					bonalib.Log("", publicLbEndpointsCloud)
+					bonalib.Log("", publicLbEndpointsEdge)
+				} else { // bonalog: True
 					// For all other types, fetch the endpoints object.
 					endpoints, err := translator.endpointsGetter(split.ServiceNamespace, split.ServiceName)
-					if apierrors.IsNotFound(err) {
+					if apierrors.IsNotFound(err) { // bonalog: Falsekubectl get pod 
 						logger.Warnf("Endpoints '%s/%s' not yet created", split.ServiceNamespace, split.ServiceName)
 						// TODO(markusthoemmes): Find out if we should actually `continue` here.
 						return nil, nil
-					} else if err != nil {
+					} else if err != nil { // bonalog: false
 						return nil, fmt.Errorf("failed to fetch endpoints '%s/%s': %w", split.ServiceNamespace, split.ServiceName, err)
 					}
 
 					typ = v3.Cluster_STATIC
-					publicLbEndpoints = lbEndpointsForKubeEndpoints(endpoints, targetPort)
+					// publicLbEndpoints = lbEndpointsForKubeEndpoints(endpoints, targetPort)
+					// publicLbEndpointsCloud, publicLbEndpointsEdge = lbEndpointsForKubeEndpointsTest(endpoints, targetPort)
+					publicLbEndpoints, publicLbEndpointsCloud, publicLbEndpointsEdge = lbEndpointsForKubeEndpointsTest(endpoints, targetPort)
 				}
 
 				connectTimeout := 5 * time.Second
@@ -216,24 +253,35 @@ func (translator *IngressTranslator) translateIngress(ctx context.Context, ingre
 				cfg := config.FromContextOrDefaults(ctx)
 
 				// As Ingress with RewriteHost points to ExternalService(kourier-internal), we don't enable TLS.
-				if (cfg.Network.SystemInternalTLSEnabled() || httpsPortUsed) && httpPath.RewriteHost == "" {
+				if (cfg.Network.SystemInternalTLSEnabled() || httpsPortUsed) && httpPath.RewriteHost == "" { // bonalog: false
 					var err error
 					transportSocket, err = translator.createUpstreamTransportSocket(http2, split.ServiceNamespace)
-					if err != nil {
+					if err != nil { // bonalog: false
 						return nil, err
 					}
 				}
+
 				cluster := envoy.NewCluster(splitName, connectTimeout, publicLbEndpoints, http2, transportSocket, typ)
+				clusterCloud := envoy.NewCluster(splitName+"_cloud", connectTimeout, publicLbEndpointsCloud, http2, transportSocket, typ)
+				clusterEdge := envoy.NewCluster(splitName+"_edge", connectTimeout, publicLbEndpointsEdge, http2, transportSocket, typ)
+				
 				logger.Debugf("adding cluster: %v", cluster)
-				clusters = append(clusters, cluster)
+
+				// clusters = append(clusters, cluster)
+				clusters = append(clusters, clusterEdge)
+				clusters = append(clusters, clusterCloud)
 
 				weightedCluster := envoy.NewWeightedCluster(splitName, uint32(split.Percent), split.AppendHeaders)
+				weightedClusterCloud := envoy.NewWeightedCluster(splitName+"_cloud", uint32(split.Percent), split.AppendHeaders)
+				weightedClusterEdge := envoy.NewWeightedCluster(splitName+"_edge", uint32(split.Percent), split.AppendHeaders)
 				wrs = append(wrs, weightedCluster)
+				wrsCloud = append(wrsCloud, weightedClusterCloud)
+				wrsEdge = append(wrsEdge, weightedClusterEdge)
 			}
 
-			if len(wrs) != 0 {
+			if len(wrs) != 0 { // True
 				// disable ext_authz filter for HTTP01 challenge when the feature is enabled
-				if extAuthzEnabled && strings.HasPrefix(path, "/.well-known/acme-challenge/") {
+				if extAuthzEnabled && strings.HasPrefix(path, "/.well-known/acme-challenge/") { // False
 					routes = append(routes, envoy.NewRouteExtAuthzDisabled(
 						pathName, matchHeadersFromHTTPPath(httpPath), path, wrs, 0, httpPath.AppendHeaders, httpPath.RewriteHost))
 				} else if _, ok := os.LookupEnv("KOURIER_HTTPOPTION_DISABLED"); !ok && ingress.Spec.HTTPOption == v1alpha1.HTTPOptionRedirected && rule.Visibility == v1alpha1.IngressVisibilityExternalIP {
@@ -241,9 +289,13 @@ func (translator *IngressTranslator) translateIngress(ctx context.Context, ingre
 					// e.g. Kourier on OpenShift handles HTTPOption by OpenShift Route so KOURIER_HTTPOPTION_DISABLED should be set.
 					routes = append(routes, envoy.NewRedirectRoute(
 						pathName, matchHeadersFromHTTPPath(httpPath), path))
-				} else {
+				} else { // bonalog: True
 					routes = append(routes, envoy.NewRoute(
-						pathName, matchHeadersFromHTTPPath(httpPath), path, wrs, 0, httpPath.AppendHeaders, httpPath.RewriteHost))
+						pathName, matchHeadersFromHTTPPath(httpPath), path, wrs, 0, httpPath.AppendHeaders, httpPath.RewriteHost, ""))
+					routesCloud = append(routesCloud, envoy.NewRoute(
+						pathName, matchHeadersFromHTTPPath(httpPath), path, wrsCloud, 0, httpPath.AppendHeaders, httpPath.RewriteHost, "cloud"))
+					routesEdge = append(routesEdge, envoy.NewRoute(
+						pathName, matchHeadersFromHTTPPath(httpPath), path, wrsEdge, 0, httpPath.AppendHeaders, httpPath.RewriteHost, "edge"))
 				}
 				if len(ingress.Spec.TLS) != 0 || useHTTPSListenerWithOneCert() {
 					tlsRoutes = append(tlsRoutes, envoy.NewRoute(
@@ -252,13 +304,13 @@ func (translator *IngressTranslator) translateIngress(ctx context.Context, ingre
 			}
 		}
 
-		if len(routes) == 0 {
+		if len(routes) == 0 { // False
 			// Return nothing if there are not routes to generate.
 			return nil, nil
 		}
 
-		var virtualHost, virtualTLSHost *route.VirtualHost
-		if extAuthzEnabled {
+		var virtualHost, virtualHostCloud, virtualHostEdge, virtualTLSHost *route.VirtualHost
+		if extAuthzEnabled { // bonalog: False
 			contextExtensions := kmeta.UnionMaps(map[string]string{
 				"client":     "kourier",
 				"visibility": string(rule.Visibility),
@@ -267,23 +319,32 @@ func (translator *IngressTranslator) translateIngress(ctx context.Context, ingre
 			if len(tlsRoutes) != 0 {
 				virtualTLSHost = envoy.NewVirtualHostWithExtAuthz(ruleName, contextExtensions, domainsForRule(rule), tlsRoutes)
 			}
-		} else {
+		} else { // bonalog: True
 			virtualHost = envoy.NewVirtualHost(ruleName, domainsForRule(rule), routes)
-			if len(tlsRoutes) != 0 {
+			virtualHostCloud = envoy.NewVirtualHost(ruleName, domainsForRule(rule), routesCloud)
+			virtualHostEdge = envoy.NewVirtualHost(ruleName, domainsForRule(rule), routesEdge)
+			if len(tlsRoutes) != 0 { // bonalog: False
 				virtualTLSHost = envoy.NewVirtualHost(ruleName, domainsForRule(rule), tlsRoutes)
 			}
 		}
 
 		internalHosts = append(internalHosts, virtualHost)
+		internalHostsCloud = append(internalHostsCloud, virtualHostCloud)
+		internalHostsEdge = append(internalHostsEdge, virtualHostEdge)
 		if rule.Visibility == v1alpha1.IngressVisibilityExternalIP {
-			externalHosts = append(externalHosts, virtualHost)
+			externalHostsCloud = append(externalHostsCloud, virtualHostCloud)
 			if virtualTLSHost != nil {
-				externalTLSHosts = append(externalTLSHosts, virtualTLSHost)
+				externalTLSHostsCloud = append(externalTLSHostsCloud, virtualTLSHost)
+			}
+		}
+		if rule.Visibility == v1alpha1.IngressVisibilityExternalIP {
+			externalHostsEdge = append(externalHostsEdge, virtualHostEdge)
+			if virtualTLSHost != nil {
+				externalTLSHostsEdge = append(externalTLSHostsEdge, virtualTLSHost)
 			}
 		}
 	}
-
-	return &translatedIngress{
+	_translatedIngress := &translatedIngress{
 		name: types.NamespacedName{
 			Namespace: ingress.Namespace,
 			Name:      ingress.Name,
@@ -291,9 +352,19 @@ func (translator *IngressTranslator) translateIngress(ctx context.Context, ingre
 		sniMatches:              sniMatches,
 		clusters:                clusters,
 		externalVirtualHosts:    externalHosts,
+		externalVirtualHostsCloud:    externalHostsCloud,
+		externalVirtualHostsEdge:    externalHostsEdge,
 		externalTLSVirtualHosts: externalTLSHosts,
+		externalTLSVirtualHostsCloud: externalTLSHostsCloud,
+		externalTLSVirtualHostsEdge: externalTLSHostsEdge,
 		internalVirtualHosts:    internalHosts,
-	}, nil
+		internalVirtualHostsCloud: internalHostsCloud,
+		internalVirtualHostsEdge: internalHostsEdge,
+	}
+
+	// bonalib.Log("translatedIngress", _translatedIngress.externalVirtualHosts[0].Routes[0].GetRoute())
+
+	return _translatedIngress, nil
 }
 
 func (translator *IngressTranslator) createUpstreamTransportSocket(http2 bool, namespace string) (*envoycorev3.TransportSocket, error) {
@@ -386,12 +457,14 @@ func trackService(t tracker.Interface, svcNs, svcName string, ingress *v1alpha1.
 }
 
 func lbEndpointsForKubeEndpoints(kubeEndpoints *corev1.Endpoints, targetPort int32) []*endpoint.LbEndpoint {
+	// bonalib.Log(">>>func lbEndpointsForKubeEndpoints", "")
+	// bonalib.Log("endpoints", kubeEndpoints.Subsets[0])
 	var readyAddressCount int
 	for _, subset := range kubeEndpoints.Subsets {
 		readyAddressCount += len(subset.Addresses)
 	}
 
-	if readyAddressCount == 0 {
+	if readyAddressCount == 0 { // bonalog: false
 		return nil
 	}
 
@@ -401,8 +474,36 @@ func lbEndpointsForKubeEndpoints(kubeEndpoints *corev1.Endpoints, targetPort int
 			eps = append(eps, envoy.NewLBEndpoint(address.IP, uint32(targetPort)))
 		}
 	}
-
+	// bonalib.Log("<<<func lbEndpointsForKubeEndpoints", "")
 	return eps
+}
+
+func lbEndpointsForKubeEndpointsTest(kubeEndpoints *corev1.Endpoints, targetPort int32) ([]*endpoint.LbEndpoint, []*endpoint.LbEndpoint, []*endpoint.LbEndpoint) {
+	// bonalib.Log(">>>func lbEndpointsForKubeEndpointsTest", "")
+	// bonalib.Log("endpoints", kubeEndpoints.Subsets[0])
+	var readyAddressCount int
+	for _, subset := range kubeEndpoints.Subsets {
+		readyAddressCount += len(subset.Addresses)
+	}
+
+	if readyAddressCount == 0 { // bonalog: false
+		return nil, nil, nil
+	}
+
+	eps := make([]*endpoint.LbEndpoint, 0, readyAddressCount)
+	eps_cloud := make([]*endpoint.LbEndpoint, 0, readyAddressCount)
+	eps_edge := make([]*endpoint.LbEndpoint, 0, readyAddressCount)
+	for _, subset := range kubeEndpoints.Subsets {
+		for _, address := range subset.Addresses {
+			if *address.NodeName == "node1" {
+				eps_cloud = append(eps_cloud, envoy.NewLBEndpoint(address.IP, uint32(targetPort)))
+			} else if *address.NodeName == "node3" {
+				eps_edge = append(eps_edge, envoy.NewLBEndpoint(address.IP, uint32(targetPort)))			}
+			eps = append(eps, envoy.NewLBEndpoint(address.IP, uint32(targetPort)))
+		}
+	}
+	// bonalib.Log("<<<func lbEndpointsForKubeEndpointsTest", "")
+	return eps, eps_cloud, eps_edge
 }
 
 func matchHeadersFromHTTPPath(httpPath v1alpha1.HTTPIngressPath) []*route.HeaderMatcher {

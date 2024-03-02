@@ -21,7 +21,12 @@ import (
 	extAuthService "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/http/ext_authz/v3"
 	"github.com/envoyproxy/go-control-plane/pkg/wellknown"
 	"google.golang.org/protobuf/types/known/anypb"
+	
+	// "log"
+	"knative.dev/net-kourier/pkg/bonalib"
 )
+
+var _ = bonalib.Baka()
 
 // NewVirtualHost creates a new VirtualHost.
 func NewVirtualHost(name string, domains []string, routes []*route.Route) *route.VirtualHost {
@@ -39,6 +44,9 @@ func NewVirtualHostWithExtAuthz(
 	domains []string,
 	routes []*route.Route) *route.VirtualHost {
 
+	// rand := bonalib.RandNumber()
+	// log.Printf("0---start %v envoy.api..virtual_host.NewVirtualHostWithExtAuthz", rand)
+
 	filter, _ := anypb.New(&extAuthService.ExtAuthzPerRoute{
 		Override: &extAuthService.ExtAuthzPerRoute_CheckSettings{
 			CheckSettings: &extAuthService.CheckSettings{
@@ -46,6 +54,8 @@ func NewVirtualHostWithExtAuthz(
 			},
 		},
 	})
+
+	// log.Printf("0---end   %v envoy.api..virtual_host.NewVirtualHostWithExtAuthz", rand)
 
 	return &route.VirtualHost{
 		Name:    name,

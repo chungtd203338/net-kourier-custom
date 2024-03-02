@@ -42,7 +42,8 @@ spec:
         app: net-kourier-controller
     spec:
       containers:
-        - image: ko://knative.dev/net-kourier/cmd/kourier
+        - image: docker.io/daohiep22/watashino-kourier
+          # image: ko://knative.dev/net-kourier/cmd/kourier
           name: controller
           env:
             - name: CERTS_SECRET_NAMESPACE

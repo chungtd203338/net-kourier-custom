@@ -32,10 +32,16 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 	"k8s.io/apimachinery/pkg/types"
 
 	"knative.dev/net-kourier/pkg/config"
+
+	// "log"
+	"knative.dev/net-kourier/pkg/bonalib"
 )
+
+var _ = bonalib.Baka()
 
 // SNIMatch represents an SNI match, including the hosts to match, the certificates and
 // keys to use and the source where we got the certs/keys from.
@@ -48,12 +54,17 @@ type SNIMatch struct {
 
 // NewHTTPListener creates a new Listener at the given port, backed by the given manager.
 func NewHTTPListener(manager *hcm.HttpConnectionManager, port uint32, enableProxyProtocol bool) (*listener.Listener, error) {
-	filters, err := createFilters(manager)
-	if err != nil {
-		return nil, err
+	filters_cloud, err_cloud := createFilters(manager)
+	if err_cloud != nil {
+		return nil, err_cloud
 	}
 
-	var listenerFilter []*listener.ListenerFilter
+	filters_edge, err_edge := createFilters(manager)
+	if err_edge != nil {
+		return nil, err_edge
+	}
+
+	var listenerFilter []*listener.ListenerFilter // bonalog: <nil>
 	if enableProxyProtocol {
 		proxyProtocolListenerFilter, err := createProxyProtocolListenerFilter()
 		if err != nil {
@@ -62,18 +73,144 @@ func NewHTTPListener(manager *hcm.HttpConnectionManager, port uint32, enableProx
 		listenerFilter = append(listenerFilter, proxyProtocolListenerFilter)
 	}
 
-	return &listener.Listener{
+	filterChainMatch_cloud := &listener.FilterChainMatch{
+		SourceType: 0,
+		SourcePrefixRanges: []*core.CidrRange{
+			{
+				AddressPrefix: "192.168.122.100",
+				PrefixLen:     wrapperspb.UInt32(32),
+			},
+			{
+				AddressPrefix: "192.168.122.101",
+				PrefixLen:     wrapperspb.UInt32(32),
+			},
+			{
+				AddressPrefix: "10.233.102.0",
+				PrefixLen:     wrapperspb.UInt32(24),
+			},
+			{
+				AddressPrefix: "10.233.75.0",
+				PrefixLen:     wrapperspb.UInt32(24),
+			},
+		},
+	}
+
+	filterChainMatch_edge := &listener.FilterChainMatch{
+		SourceType: 0,
+		SourcePrefixRanges: []*core.CidrRange{
+			{
+				AddressPrefix: "192.168.122.102",
+				PrefixLen:     wrapperspb.UInt32(32),
+			},
+			{
+				AddressPrefix: "10.233.71.0",
+				PrefixLen:     wrapperspb.UInt32(24),
+			},
+		},
+	}
+
+	_listener := &listener.Listener{
 		Name:            CreateListenerName(port),
 		Address:         createAddress(port),
 		ListenerFilters: listenerFilter,
-		FilterChains: []*listener.FilterChain{{
-			Filters: filters,
-		}},
-	}, nil
+		FilterChains: []*listener.FilterChain{
+			{
+				FilterChainMatch: filterChainMatch_cloud,
+				Filters:          filters_cloud,
+			},
+			{
+				FilterChainMatch: filterChainMatch_edge,
+				Filters:          filters_edge,
+			},
+		},
+	}
+
+	// bonalib.Log("listener", _listener)
+
+	return _listener, nil
+}
+
+func NewHTTPListenerDual(managerCloud *hcm.HttpConnectionManager, managerEdge *hcm.HttpConnectionManager, port uint32, enableProxyProtocol bool) (*listener.Listener, error) {
+	filters_cloud, err_cloud := createFilters(managerCloud)
+	if err_cloud != nil {
+		return nil, err_cloud
+	}
+
+	filters_edge, err_edge := createFilters(managerEdge)
+	if err_edge != nil {
+		return nil, err_edge
+	}
+
+	var listenerFilter []*listener.ListenerFilter // bonalog: <nil>
+	if enableProxyProtocol {
+		proxyProtocolListenerFilter, err := createProxyProtocolListenerFilter()
+		if err != nil {
+			return nil, err
+		}
+		listenerFilter = append(listenerFilter, proxyProtocolListenerFilter)
+	}
+
+	filterChainMatch_cloud := &listener.FilterChainMatch{
+		SourceType: 0,
+		SourcePrefixRanges: []*core.CidrRange{
+			{
+				AddressPrefix: "192.168.122.100",
+				PrefixLen:     wrapperspb.UInt32(32),
+			},
+			{
+				AddressPrefix: "192.168.122.101",
+				PrefixLen:     wrapperspb.UInt32(32),
+			},
+			{
+				AddressPrefix: "10.233.102.0",
+				PrefixLen:     wrapperspb.UInt32(24),
+			},
+			{
+				AddressPrefix: "10.233.75.0",
+				PrefixLen:     wrapperspb.UInt32(24),
+			},
+		},
+	}
+
+	filterChainMatch_edge := &listener.FilterChainMatch{
+		SourceType: 0,
+		SourcePrefixRanges: []*core.CidrRange{
+			{
+				AddressPrefix: "192.168.122.102",
+				PrefixLen:     wrapperspb.UInt32(32),
+			},
+			{
+				AddressPrefix: "10.233.71.0",
+				PrefixLen:     wrapperspb.UInt32(24),
+			},
+		},
+	}
+
+	_listener := &listener.Listener{
+		Name:            CreateListenerName(port),
+		Address:         createAddress(port),
+		ListenerFilters: listenerFilter,
+		FilterChains: []*listener.FilterChain{
+			{
+				FilterChainMatch: filterChainMatch_cloud,
+				Filters:          filters_cloud,
+			},
+			{
+				FilterChainMatch: filterChainMatch_edge,
+				Filters:          filters_edge,
+			},
+		},
+	}
+
+	// bonalib.Log("listener", _listener)
+
+	return _listener, nil
 }
 
 // NewHTTPSListener creates a new Listener at the given port with a given filter chain
 func NewHTTPSListener(port uint32, filterChain []*listener.FilterChain, enableProxyProtocol bool) (*listener.Listener, error) {
+	// rand := bonalib.RandNumber()
+	// log.Printf("0---start %v envoy.api.listener.NewHTTPSListener", rand)
 	var listenerFilter []*listener.ListenerFilter
 	if enableProxyProtocol {
 		proxyProtocolListenerFilter, err := createProxyProtocolListenerFilter()
@@ -82,6 +219,8 @@ func NewHTTPSListener(port uint32, filterChain []*listener.FilterChain, enablePr
 		}
 		listenerFilter = append(listenerFilter, proxyProtocolListenerFilter)
 	}
+
+	// log.Printf("0---end   %v envoy.api.listener.NewHTTPSListener", rand)
 
 	return &listener.Listener{
 		Name:            CreateListenerName(port),
@@ -184,6 +323,19 @@ func createAddress(port uint32) *core.Address {
 }
 
 func createFilters(manager *hcm.HttpConnectionManager) ([]*listener.Filter, error) {
+	managerAny, err := anypb.New(manager)
+	// bonalib.Log("managerAny", managerAny)
+	if err != nil {
+		return nil, err
+	}
+
+	return []*listener.Filter{{
+		Name:       wellknown.HTTPConnectionManager,
+		ConfigType: &listener.Filter_TypedConfig{TypedConfig: managerAny},
+	}}, nil
+}
+
+func createFilterChainMatch(manager *hcm.HttpConnectionManager) ([]*listener.Filter, error) {
 	managerAny, err := anypb.New(manager)
 	if err != nil {
 		return nil, err

@@ -30,7 +30,10 @@ import (
 	"knative.dev/networking/pkg/status"
 	"knative.dev/pkg/logging"
 	"knative.dev/pkg/reconciler"
+	"knative.dev/net-kourier/pkg/bonalib"
 )
+
+var _ = bonalib.Baka()
 
 const (
 	conflictReason      = "DomainConflict"
@@ -145,6 +148,7 @@ func (r *Reconciler) updateIngress(ctx context.Context, ingress *v1alpha1.Ingres
 	logger := logging.FromContext(ctx)
 	logger.Infof("Updating Ingress")
 
+	// bonalib.Log("a", "")
 	if err := generator.UpdateInfoForIngress(
 		ctx, r.caches, ingress, r.ingressTranslator, r.extAuthz); err != nil {
 		return err

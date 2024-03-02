@@ -17,13 +17,21 @@ limitations under the License.
 package envoy
 
 import (
+	// "log"
+
 	core "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	endpoint "github.com/envoyproxy/go-control-plane/envoy/config/endpoint/v3"
+
+	"knative.dev/net-kourier/pkg/bonalib"
 )
+
+var _ = bonalib.Baka()
 
 // NewLBEndpoint creates a new LbEndpoint.
 func NewLBEndpoint(ip string, port uint32) *endpoint.LbEndpoint {
-	return &endpoint.LbEndpoint{
+	// rand := bonalib.RandNumber()
+	// log.Printf("0---%v envoy.api.lb_endpoint.NewLBEndpoint", rand)
+	result := &endpoint.LbEndpoint{
 		HostIdentifier: &endpoint.LbEndpoint_Endpoint{
 			Endpoint: &endpoint.Endpoint{
 				Address: &core.Address{
@@ -41,4 +49,10 @@ func NewLBEndpoint(ip string, port uint32) *endpoint.LbEndpoint {
 			},
 		},
 	}
+
+	// bonalib.Log(ip)
+	// bonalib.Log(port)
+	// bonalib.Log("result", result)
+
+	return result
 }

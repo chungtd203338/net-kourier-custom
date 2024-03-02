@@ -23,9 +23,12 @@ import (
 	extAuthService "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/http/ext_authz/v3"
 	"github.com/envoyproxy/go-control-plane/pkg/wellknown"
 	"google.golang.org/protobuf/types/known/anypb"
+	"knative.dev/net-kourier/pkg/bonalib"
 	"knative.dev/net-kourier/pkg/config"
 	envoy "knative.dev/net-kourier/pkg/envoy/api"
 )
+
+var _ = bonalib.Baka()
 
 const ServiceStatsClusterName = "service_stats"
 

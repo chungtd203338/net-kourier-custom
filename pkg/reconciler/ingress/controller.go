@@ -50,7 +50,11 @@ import (
 	"knative.dev/pkg/controller"
 	"knative.dev/pkg/logging"
 	"knative.dev/pkg/reconciler"
+
+	"knative.dev/net-kourier/pkg/bonalib"
 )
+
+var _ = bonalib.Baka()
 
 const (
 	gatewayLabelKey   = "app"
@@ -67,6 +71,7 @@ var isKourierIngress = reconciler.AnnotationFilterFunc(
 )
 
 func NewController(ctx context.Context, cmw configmap.Watcher) *controller.Impl {
+	// bonalib.Log("NewController", "")
 	logger := logging.FromContext(ctx)
 
 	kubernetesClient := kubeclient.Get(ctx)
@@ -79,7 +84,7 @@ func NewController(ctx context.Context, cmw configmap.Watcher) *controller.Impl 
 
 	// Create a new Cache, with the Readiness endpoint enabled, and the list of current Ingresses.
 	caches, err := generator.NewCaches(ctx, kubernetesClient, config.ExternalAuthz.Enabled)
-	if err != nil {
+	if err != nil { // bonalog: False
 		logger.Fatalw("Failed create new caches", zap.Error(err))
 	}
 
@@ -189,17 +194,17 @@ func NewController(ctx context.Context, cmw configmap.Watcher) *controller.Impl 
 
 	// Initialize the Envoy snapshot.
 	snapshot, err := r.caches.ToEnvoySnapshot(ctx)
-	if err != nil {
+	if err != nil { // bonalog: False
 		logger.Fatalw("Failed to create snapshot", zap.Error(err))
 	}
 	err = r.xdsServer.SetSnapshot(nodeID, snapshot)
-	if err != nil {
+	if err != nil { // bonalog: False
 		logger.Fatalw("Failed to set snapshot", zap.Error(err))
 	}
 
 	// Get the current list of ingresses that are ready and seed the Envoy config with them.
-	ingressesToSync, err := getReadyIngresses(ctx, knativeClient.NetworkingV1alpha1())
-	if err != nil {
+	ingressesToSync, err := getReadyIngresses(ctx, knativeClient.NetworkingV1alpha1()) // bonalog: list of 3scales
+	if err != nil { // bonalog: False
 		logger.Fatalw("Failed to fetch ready ingresses", zap.Error(err))
 	}
 	logger.Infof("Priming the config with %d ingresses", len(ingressesToSync))
@@ -217,15 +222,17 @@ func NewController(ctx context.Context, cmw configmap.Watcher) *controller.Impl 
 			return kubernetesClient.CoreV1().Services(ns).Get(ctx, name, metav1.GetOptions{})
 		},
 		impl.Tracker)
+	// bonalib.Log("ingressesToSync", ingressesToSync[0].Spec)
 
 	for _, ingress := range ingressesToSync {
 		if err := generator.UpdateInfoForIngress(
 			ctx, caches, ingress, &startupTranslator, config.ExternalAuthz.Enabled); err != nil {
 			logger.Fatalw("Failed prewarm ingress", zap.Error(err))
 		}
+		// bonalib.Log("ingress", ingress)
 	}
 	// Update the entire batch of ready ingresses at once.
-	if err := r.updateEnvoyConfig(ctx); err != nil {
+	if err := r.updateEnvoyConfig(ctx); err != nil { // bonalog: False
 		logger.Fatalw("Failed to set initial envoy config", zap.Error(err))
 	}
 

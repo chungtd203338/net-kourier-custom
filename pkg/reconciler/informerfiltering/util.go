@@ -40,7 +40,7 @@ func ShouldFilterByCertificateUID() bool {
 
 // GetContextWithFilteringLabelSelector returns the passed context with the proper label key selector added to it.
 func GetContextWithFilteringLabelSelector(ctx context.Context) context.Context {
-	if ShouldFilterByCertificateUID() {
+	if ShouldFilterByCertificateUID() { //bonalog: FALSE
 		return filteredFactory.WithSelectors(ctx, networking.CertificateUIDLabelKey)
 	}
 	return filteredFactory.WithSelectors(ctx, "") // Allow all

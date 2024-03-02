@@ -32,11 +32,18 @@ import (
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	"knative.dev/net-kourier/pkg/config"
+
+	// "log"
+	"knative.dev/net-kourier/pkg/bonalib"
 )
+
+var _ = bonalib.Baka()
 
 // NewHTTPConnectionManager creates a new HttpConnectionManager that points to the given
 // RouteConfig for further configuration.
 func NewHTTPConnectionManager(routeConfigName string, kourierConfig *config.Kourier) *hcm.HttpConnectionManager {
+	// rand := bonalib.RandNumber()
+	// log.Printf("0---start %v envoy.api.http_connection_manager.NewHTTPConnectionManager", rand)
 	filters := make([]*hcm.HttpFilter, 0, 1)
 
 	if config.ExternalAuthz.Enabled {
@@ -112,6 +119,10 @@ func NewHTTPConnectionManager(routeConfigName string, kourierConfig *config.Kour
 			},
 		}
 	}
+
+	// log.Printf("0---end   %v envoy.api.http_connection_manager.NewHTTPConnectionManager", rand)
+
+	// bonalib.Log("mgr", mgr)
 
 	return mgr
 }

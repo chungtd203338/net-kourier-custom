@@ -26,7 +26,11 @@ import (
 	httpOptions "github.com/envoyproxy/go-control-plane/envoy/extensions/upstreams/http/v3"
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/durationpb"
+	// "log"
+	"knative.dev/net-kourier/pkg/bonalib"
 )
+
+var _ = bonalib.Baka()
 
 // NewCluster generates a new v3.Cluster with the given settings.
 func NewCluster(
@@ -35,6 +39,9 @@ func NewCluster(
 	endpoints []*endpoint.LbEndpoint,
 	isHTTP2 bool, transportSocket *envoycorev3.TransportSocket,
 	discoveryType envoyclusterv3.Cluster_DiscoveryType) *envoyclusterv3.Cluster {
+	
+	// rand := bonalib.RandNumber()
+	// log.Printf("0---start %v envoy.api.cluster.NewCluster", rand)
 
 	cluster := &envoyclusterv3.Cluster{
 		Name: name,
@@ -64,6 +71,8 @@ func NewCluster(
 			"envoy.extensions.upstreams.http.v3.HttpProtocolOptions": opts,
 		}
 	}
+	
+	// bonalib.Log("cluster", cluster)
 
 	return cluster
 }

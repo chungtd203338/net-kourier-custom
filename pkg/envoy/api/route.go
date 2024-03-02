@@ -26,7 +26,11 @@ import (
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
+
+	"knative.dev/net-kourier/pkg/bonalib"
 )
+
+var _ = bonalib.Baka()
 
 // NewRoute creates a new Route.
 func NewRoute(name string,
@@ -35,7 +39,15 @@ func NewRoute(name string,
 	wrs []*route.WeightedCluster_ClusterWeight,
 	routeTimeout time.Duration,
 	headers map[string]string,
-	hostRewrite string) *route.Route {
+	hostRewrite string,
+	region ...string) *route.Route {
+
+	// var _region string
+	// if len(region) == 0 {
+	// 	_region = ""
+	// } else {
+	// 	_region = region[0]
+	// }
 
 	routeAction := &route.RouteAction{
 		ClusterSpecifier: &route.RouteAction_WeightedClusters{
@@ -56,7 +68,7 @@ func NewRoute(name string,
 		}
 	}
 
-	return &route.Route{
+	_route := &route.Route{
 		Name: name,
 		Match: &route.RouteMatch{
 			PathSpecifier: &route.RouteMatch_Prefix{
@@ -69,12 +81,18 @@ func NewRoute(name string,
 		},
 		RequestHeadersToAdd: headersToAdd(headers),
 	}
+
+	// bonalib.Log("route", routeAction)
+
+	return _route
 }
 
 func NewRedirectRoute(name string,
 	headersMatch []*route.HeaderMatcher,
 	path string,
 ) *route.Route {
+	// rand := bonalib.RandNumber()
+	// log.Printf("0---%v envoy.api.route.NewRedirectRoute", rand)
 	return &route.Route{
 		Name: name,
 		Match: &route.RouteMatch{
@@ -101,6 +119,9 @@ func NewRouteExtAuthzDisabled(name string,
 	headers map[string]string,
 	hostRewrite string) *route.Route {
 
+	// rand := bonalib.RandNumber()
+	// log.Printf("0---start %v envoy.api.route.NewRouteExtAuthzDisabled", rand)
+
 	newRoute := NewRoute(name, headersMatch, path, wrs, routeTimeout, headers, hostRewrite)
 	extAuthzDisabled, _ := anypb.New(&extAuthService.ExtAuthzPerRoute{
 		Override: &extAuthService.ExtAuthzPerRoute_Disabled{
@@ -110,6 +131,8 @@ func NewRouteExtAuthzDisabled(name string,
 	newRoute.TypedPerFilterConfig = map[string]*any.Any{
 		wellknown.HTTPExternalAuthorization: extAuthzDisabled,
 	}
+
+	// log.Printf("0---end   %v envoy.api.route.NewRouteExtAuthzDisabled", rand)
 
 	return newRoute
 }

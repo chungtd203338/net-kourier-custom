@@ -18,15 +18,20 @@ package envoy
 
 import (
 	core "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
+
+	// "log"
+	// "knative.dev/net-kourier/pkg/bonalib"
 )
 
 // headersToAdd generates a list of HeaderValueOption from a map of headers.
 func headersToAdd(headers map[string]string) []*core.HeaderValueOption {
+	// rand := bonalib.RandNumber()
+	// log.Printf("0---start %v envoy.api.headers.headersToAdd", rand)
 	if len(headers) == 0 {
 		return nil
 	}
 
-	res := make([]*core.HeaderValueOption, 0, len(headers))
+	res := make([]*core.HeaderValueOption, 0, len(headers)+1)
 	for headerName, headerVal := range headers {
 		res = append(res, &core.HeaderValueOption{
 			Header: &core.HeaderValue{
@@ -38,6 +43,8 @@ func headersToAdd(headers map[string]string) []*core.HeaderValueOption {
 			AppendAction: core.HeaderValueOption_OVERWRITE_IF_EXISTS_OR_ADD,
 		})
 	}
+
+	// log.Printf("0---end   %v envoy.api.headers.headersToAdd", rand)
 
 	return res
 }
