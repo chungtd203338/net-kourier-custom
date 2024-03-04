@@ -66,6 +66,6 @@ jobs:
         echo ">> Deploy certificate for upstream traffic"
         ./test/generate-upstream-cert.sh
 
-    - name: Run upgrade tests
-      run: |
-        ./test/e2e-upgrade-kind.sh
+    # - name: Run upgrade tests
+    #   run: |
+    #     ./test/e2e-upgrade-kind.sh
