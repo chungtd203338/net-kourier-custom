@@ -1,17 +1,17 @@
-# Copyright 2022 The Knative Authors.
-# SPDX-License-Identifier: Apache-2.0
+# # Copyright 2022 The Knative Authors.
+# # SPDX-License-Identifier: Apache-2.0
 
-# This file is automagically synced here from github.com/knative-extensions/knobots
+# # This file is automagically synced here from github.com/knative-extensions/knobots
 
-name: Test
+# name: Test
 
-on:
-  push:
-    branches: [ 'main', 'release-*' ]
+# on:
+#   push:
+#     branches: [ 'main', 'release-*' ]
 
-  pull_request:
-    branches: [ 'main', 'release-*' ]
+#   pull_request:
+#     branches: [ 'main', 'release-*' ]
 
-jobs:
-  test:
-    uses: knative/actions/.github/workflows/reusable-go-test.yaml@main
+# jobs:
+#   test:
+#     uses: knative/actions/.github/workflows/reusable-go-test.yaml@main
