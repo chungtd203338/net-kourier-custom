@@ -33,17 +33,18 @@ koBuild() {
 convertImage() {
     message="change image from docker to crictl" && logInfo
     image=$(docker images | grep ko.local | grep $component | grep latest | awk '{print $1}'):latest
-    docker rmi -f daohiep22/watashino-$component:latest
-    docker image tag $image docker.io/daohiep22/watashino-$component:latest
+    docker rmi -f chung123abc/net-$component:latest
+    docker image tag $image docker.io/chung123abc/net-$component:latest
     docker rmi $image
     image=$(docker images | grep ko.local | grep $component | awk '{print $1}'):$(docker images | grep ko.local | grep $component | awk '{print $2}')
     docker rmi $image
-    docker save -o watashino-$component.tar docker.io/daohiep22/watashino-$component:latest
+    docker save -o net-$component.tar docker.io/chung123abc/net-$component:latest
     message="Saved atarashi-imeji to .tar file" && logSuccess
-    sudo crictl rmi docker.io/daohiep22/watashino-$component:latest
-    sudo ctr -n=k8s.io images import watashino-$component.tar
+
+    sudo crictl rmi docker.io/chung123abc/net-$component:latest
+    sudo ctr -n=k8s.io images import net-$component.tar
     message="Untar atarashi-imeji" && logSuccess
-    rm -rf watashino-$component.tar
+    rm -rf net-$component.tar
 }
 
 deployNewVersion() {
@@ -56,7 +57,7 @@ logPod() {
     sleep 2
     pod=$(kubectl -n knative-serving get pod | grep net-$component | grep -v Terminating | awk '{print $1}')
     kubectl -n knative-serving wait --for=condition=ready pod $pod > /dev/null 2>&1
-    curlStatus=$(curl -I hello.default.svc.cluster.local | head -n 1| cut -d $' ' -f2)
+    curlStatus=$(kubectl exec curl-test -- curl -I hello.default.svc.cluster.local | head -n 1| cut -d $' ' -f2)
     echo $curlStatus
     clear
     if [ $curlStatus -eq "200" ]; then
@@ -71,8 +72,8 @@ logPod() {
 clear
 
 
-
-echo -e "$REDBGR このスクリプトはボナちゃんによって書かれています $NCBGR"
+echo -e "ok"
+# echo -e "$REDBGR このスクリプトはボナちゃんによって書かれています $NCBGR"
 
 
 
@@ -81,9 +82,9 @@ if [ $OPTION == "ko" ]; then
     docker rmi -f $image
     koBuild
 elif [ $OPTION == "dep" ]; then
-    convertImage
+    # convertImage
     deployNewVersion
-    logPod
+    # logPod
 elif [ $OPTION == "log" ]; then
     deployNewVersion
     logPod
@@ -92,14 +93,14 @@ elif [ $OPTION == "ful" ]; then
     if [ $? -eq "0" ]; then
         convertImage
         deployNewVersion
-        logPod
+        # logPod
     else
         exit 1
     fi
 elif [ $OPTION == "clean" ]; then
     go clean -cache
-    ./hack/update-deps.sh --upgrade
-    ./hack/update-codegen.sh
+    # ./hack/update-deps.sh --upgrade
+    # ./hack/update-codegen.sh
     clear
     koBuild
     convertImage

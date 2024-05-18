@@ -36,30 +36,20 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
 	kubeclient "k8s.io/client-go/kubernetes"
+	"knative.dev/net-kourier/pkg/bonalib"
 	"knative.dev/net-kourier/pkg/config"
 	envoy "knative.dev/net-kourier/pkg/envoy/api"
 	rconfig "knative.dev/net-kourier/pkg/reconciler/ingress/config"
 	"knative.dev/pkg/system"
-	"knative.dev/net-kourier/pkg/bonalib"
 )
 
 var _ = bonalib.Baka()
 
 const (
-	envCertsSecretNamespace    = "CERTS_SECRET_NAMESPACE"
-	envCertsSecretName         = "CERTS_SECRET_NAME"
-	certFieldInSecret          = "tls.crt"
-	keyFieldInSecret           = "tls.key"
-	// externalRouteConfigName    = "external_services"
-	externalRouteConfigNameCloud = "external_services_cloud"
-	externalRouteConfigNameEdge = "external_services_edge"
-	// externalTLSRouteConfigName = "external_tls_services"
-	externalTLSRouteConfigNameCloud = "external_tls_services_cloud"
-	externalTLSRouteConfigNameEdge = "external_tls_services_edge"
-	// internalRouteConfigName    = "internal_services"
-	internalRouteConfigNameCloud = "internal_services_cloud"
-	internalRouteConfigNameEdge = "internal_services_edge"
-	internalTLSRouteConfigName = "internal_tls_services"
+	envCertsSecretNamespace = "CERTS_SECRET_NAMESPACE"
+	envCertsSecretName      = "CERTS_SECRET_NAME"
+	certFieldInSecret       = "tls.crt"
+	keyFieldInSecret        = "tls.key"
 )
 
 // ErrDomainConflict is an error produces when two ingresses have conflicting domains.
@@ -95,21 +85,16 @@ func (caches *Caches) UpdateIngress(ctx context.Context, ingressTranslation *tra
 	// deleted the ingress before adding it.
 	caches.mu.Lock()
 	defer caches.mu.Unlock()
-
 	caches.deleteTranslatedIngress(ingressTranslation.name.Name, ingressTranslation.name.Namespace)
 	return caches.addTranslatedIngress(ingressTranslation)
 }
 
 func (caches *Caches) validateIngress(translatedIngress *translatedIngress) error {
-	for _, vhost := range translatedIngress.internalVirtualHostsCloud {
-		if caches.domainsInUse.HasAny(vhost.Domains...) {
-			return ErrDomainConflict
-		}
-	}
-
-	for _, vhost := range translatedIngress.internalVirtualHostsEdge {
-		if caches.domainsInUse.HasAny(vhost.Domains...) {
-			return ErrDomainConflict
+	for i := 0; i < len(regions); i++ {
+		for _, vhost := range translatedIngress.internalVirtualHostsTest[i] {
+			if caches.domainsInUse.HasAny(vhost.Domains...) {
+				return ErrDomainConflict
+			}
 		}
 	}
 
@@ -120,9 +105,10 @@ func (caches *Caches) addTranslatedIngress(translatedIngress *translatedIngress)
 	if err := caches.validateIngress(translatedIngress); err != nil {
 		return err
 	}
-
-	for _, vhost := range translatedIngress.internalVirtualHostsCloud {
-		caches.domainsInUse.Insert(vhost.Domains...)
+	for i := 0; i < len(regions); i++ {
+		for _, vhost := range translatedIngress.internalVirtualHostsTest[i] {
+			caches.domainsInUse.Insert(vhost.Domains...)
+		}
 	}
 
 	caches.translatedIngresses[translatedIngress.name] = translatedIngress
@@ -149,51 +135,39 @@ func (caches *Caches) ToEnvoySnapshot(ctx context.Context) (*cache.Snapshot, err
 	caches.mu.Lock()
 	defer caches.mu.Unlock()
 
-	// localVHosts := make([]*route.VirtualHost, 0, len(caches.translatedIngresses)+1)
-	localVHostsCloud := make([]*route.VirtualHost, 0, len(caches.translatedIngresses)+1)
-	localVHostsEdge := make([]*route.VirtualHost, 0, len(caches.translatedIngresses)+1)
-	// externalVHosts := make([]*route.VirtualHost, 0, len(caches.translatedIngresses))
-	externalVHostsCloud := make([]*route.VirtualHost, 0, len(caches.translatedIngresses))
-	externalVHostsEdge := make([]*route.VirtualHost, 0, len(caches.translatedIngresses))
-	// externalTLSVHosts := make([]*route.VirtualHost, 0, len(caches.translatedIngresses))
-	externalTLSVHostsCloud := make([]*route.VirtualHost, 0, len(caches.translatedIngresses))
-	externalTLSVHostsEdge := make([]*route.VirtualHost, 0, len(caches.translatedIngresses))
+	localVHosts := make([][]*route.VirtualHost, len(regions)+1)
+	externalVHosts := make([][]*route.VirtualHost, len(regions)+1)
+	externalTLSVHosts := make([][]*route.VirtualHost, len(regions)+1)
+
+	for i := 0; i < len(regions); i++ {
+		localVHosts[i] = make([]*route.VirtualHost, 0, len(caches.translatedIngresses)+1)
+		externalVHosts[i] = make([]*route.VirtualHost, 0, len(caches.translatedIngresses)+1)
+		externalTLSVHosts[i] = make([]*route.VirtualHost, 0, len(caches.translatedIngresses)+1)
+	}
+
 	snis := sniMatches{}
 
 	for _, translatedIngress := range caches.translatedIngresses {
-		// localVHosts	= append(localVHosts, translatedIngress.internalVirtualHosts...)
-		localVHostsCloud = append(localVHostsCloud, translatedIngress.internalVirtualHostsCloud...)
-		localVHostsEdge = append(localVHostsEdge, translatedIngress.internalVirtualHostsEdge...)
-		// externalVHosts = append(externalVHosts, translatedIngress.externalVirtualHosts...)
-		externalVHostsCloud = append(externalVHostsCloud, translatedIngress.externalVirtualHostsCloud...)
-		externalVHostsEdge = append(externalVHostsEdge, translatedIngress.externalVirtualHosts...)
-		// externalTLSVHosts = append(externalTLSVHosts, translatedIngress.externalTLSVirtualHosts...)
-		externalTLSVHostsCloud = append(externalTLSVHostsCloud, translatedIngress.externalTLSVirtualHosts...)
-		externalTLSVHostsEdge = append(externalTLSVHostsEdge, translatedIngress.externalTLSVirtualHosts...)
-
-		for _, match := range translatedIngress.sniMatches {
-			snis.consume(match)
+		for i := 0; i < len(regions); i++ {
+			localVHosts[i] = append(localVHosts[i], translatedIngress.internalVirtualHostsTest[i]...)
+			externalVHosts[i] = append(externalVHosts[i], translatedIngress.externalVirtualHostsTest[i]...)
+			externalTLSVHosts[i] = append(externalTLSVHosts[i], translatedIngress.externalTLSVirtualHostsTest[i]...)
+			for _, match := range translatedIngress.sniMatches {
+				snis.consume(match)
+			}
 		}
 	}
 
 	// Append the statusHost too.
-	// localVHosts = append(localVHosts, caches.statusVirtualHost)
-	localVHostsCloud = append(localVHostsCloud, caches.statusVirtualHost)
-	localVHostsEdge = append(localVHostsEdge, caches.statusVirtualHost)
-
-	// bonalib.Log("caches.statusVirtualHost", caches.statusVirtualHost)
+	for i := 0; i < len(regions); i++ {
+		localVHosts[i] = append(localVHosts[i], caches.statusVirtualHost)
+	}
 
 	listeners, routes, clusters, err := generateListenersAndRouteConfigsAndClusters(
 		ctx,
-		// externalVHosts,
-		externalVHostsCloud,
-		externalVHostsEdge,
-		// externalTLSVHosts,
-		externalTLSVHostsCloud,
-		externalTLSVHostsEdge,
-		// localVHosts,
-		localVHostsCloud,
-		localVHostsEdge,
+		externalVHosts,
+		externalTLSVHosts,
+		localVHosts,
 		snis.list(),
 		caches.kubeClient,
 	)
@@ -211,8 +185,7 @@ func (caches *Caches) ToEnvoySnapshot(ctx context.Context) (*cache.Snapshot, err
 			resource.ListenerType: listeners,
 		},
 	)
-	// bonalib.Log("snapshot", _snapshot.Resources[5].Items["listener_8090"])
-	bonalib.Log("snapshot", "")
+	bonalib.Log("snapshot", _snapshot)
 	return _snapshot, err
 }
 
@@ -239,8 +212,12 @@ func (caches *Caches) deleteTranslatedIngress(ingressName, ingressNamespace stri
 		for _, cluster := range translated.clusters {
 			caches.clusters.setExpiration(cluster.Name, ingressName, ingressNamespace)
 		}
-
-		for _, vhost := range translated.internalVirtualHosts {
+		// for i := 0; i < len(regions); i++ {
+		// 	for _, vhost := range translated.internalVirtualHostsTest[i] {
+		// 		caches.domainsInUse.Delete(vhost.Domains...)
+		// 	}
+		// }
+		for _, vhost := range translated.internalVirtualHostsTest[0] {
 			caches.domainsInUse.Delete(vhost.Domains...)
 		}
 
@@ -250,80 +227,60 @@ func (caches *Caches) deleteTranslatedIngress(ingressName, ingressNamespace stri
 
 func generateListenersAndRouteConfigsAndClusters(
 	ctx context.Context,
-	// externalVirtualHosts []*route.VirtualHost,
-	externalVirtualHostsCloud []*route.VirtualHost,
-	externalVirtualHostsEdge []*route.VirtualHost,
-	// externalTLSVirtualHosts []*route.VirtualHost,
-	externalTLSVirtualHostsCloud []*route.VirtualHost,
-	externalTLSVirtualHostsEdge []*route.VirtualHost,
-	// clusterLocalVirtualHosts []*route.VirtualHost,
-	clusterLocalVirtualHostsCloud []*route.VirtualHost,
-	clusterLocalVirtualHostsEdge []*route.VirtualHost,
+	externalVirtualHosts [][]*route.VirtualHost,
+	externalTLSVirtualHosts [][]*route.VirtualHost,
+	clusterLocalVirtualHosts [][]*route.VirtualHost,
 	sniMatches []*envoy.SNIMatch,
 	kubeclient kubeclient.Interface) ([]cachetypes.Resource, []cachetypes.Resource, []cachetypes.Resource, error) {
 
+	externalRouteConfigName := []string{"external_services_region1", "external_services_region2", "external_services_region3"}
+	externalTLSRouteConfigName := []string{"external_tls_services_region1", "external_tls_services_region2", "external_tls_services_region3"}
+	internalRouteConfigName := []string{"internal_services_region1", "internal_services_region2", "internal_services_region3"}
+	internalTLSRouteConfigName := []string{"internal_tls_services_region1", "internal_tls_services_region2", "internal_tls_services_region3"}
 	// This has to be "OrDefaults" because this path is called before the informers are
 	// running when booting the controller up and prefilling the config before making it
 	// ready.
 	cfg := rconfig.FromContextOrDefaults(ctx)
 
 	// First, we save the RouteConfigs with the proper name and all the virtualhosts etc. into the cache.
-	// externalRouteConfig := envoy.NewRouteConfig(externalRouteConfigName, externalVirtualHosts)
-	externalRouteConfigCloud := envoy.NewRouteConfig(externalRouteConfigNameCloud, externalVirtualHostsCloud)
-	externalRouteConfigEdge := envoy.NewRouteConfig(externalRouteConfigNameEdge, externalVirtualHostsEdge)
-	// externalTLSRouteConfig := envoy.NewRouteConfig(externalTLSRouteConfigName, externalTLSVirtualHosts)
-	externalTLSRouteConfigCloud := envoy.NewRouteConfig(externalTLSRouteConfigNameCloud, externalTLSVirtualHostsCloud)
-	externalTLSRouteConfigEdge := envoy.NewRouteConfig(externalTLSRouteConfigNameEdge, externalTLSVirtualHostsEdge)
-	// internalRouteConfig := envoy.NewRouteConfig(internalRouteConfigName, clusterLocalVirtualHosts)
-	internalRouteConfigCloud := envoy.NewRouteConfig(internalRouteConfigNameCloud, clusterLocalVirtualHostsCloud)
-	internalRouteConfigEdge := envoy.NewRouteConfig(internalRouteConfigNameEdge, clusterLocalVirtualHostsEdge)
-	// bonalib.Log("internalRouteConfigCloud", internalRouteConfigCloud)
+	externalRouteConfig := make([]*route.RouteConfiguration, len(regions)+1)
+	externalTLSRouteConfig := make([]*route.RouteConfiguration, len(regions)+1)
+	internalRouteConfig := make([]*route.RouteConfiguration, len(regions)+1)
 
-	// Now we setup connection managers, that reference the routeconfigs via RDS.
-	// externalManager := envoy.NewHTTPConnectionManager(externalRouteConfig.Name, cfg.Kourier)
-	externalManagerCloud := envoy.NewHTTPConnectionManager(externalRouteConfigCloud.Name, cfg.Kourier)
-	externalManagerEdge := envoy.NewHTTPConnectionManager(externalRouteConfigEdge.Name, cfg.Kourier)
-	// externalTLSManager := envoy.NewHTTPConnectionManager(externalTLSRouteConfig.Name, cfg.Kourier)
-	externalTLSManagerCloud := envoy.NewHTTPConnectionManager(externalTLSRouteConfigCloud.Name, cfg.Kourier)
-	externalTLSManagerEdge := envoy.NewHTTPConnectionManager(externalTLSRouteConfigEdge.Name, cfg.Kourier)
-	// internalManager := envoy.NewHTTPConnectionManager(internalRouteConfig.Name, cfg.Kourier)
-	internalManagerCloud := envoy.NewHTTPConnectionManager(internalRouteConfigCloud.Name, cfg.Kourier)
-	internalManagerEdge := envoy.NewHTTPConnectionManager(internalRouteConfigEdge.Name, cfg.Kourier)
+	externalManager := make([]*httpconnmanagerv3.HttpConnectionManager, len(regions)+1)
+	externalTLSManager := make([]*httpconnmanagerv3.HttpConnectionManager, len(regions)+1)
+	internalManager := make([]*httpconnmanagerv3.HttpConnectionManager, len(regions)+1)
 
-	// bonalib.Log("internalManager", internalManager)
+	for i := 0; i < len(regions); i++ {
+		externalRouteConfig[i] = envoy.NewRouteConfig(externalRouteConfigName[i], externalTLSVirtualHosts[i])
+		externalTLSRouteConfig[i] = envoy.NewRouteConfig(externalTLSRouteConfigName[i], externalTLSVirtualHosts[i])
+		internalRouteConfig[i] = envoy.NewRouteConfig(internalRouteConfigName[i], clusterLocalVirtualHosts[i])
+		externalManager[i] = envoy.NewHTTPConnectionManager(externalRouteConfig[i].Name, cfg.Kourier)
+		externalTLSManager[i] = envoy.NewHTTPConnectionManager(externalTLSRouteConfig[i].Name, cfg.Kourier)
+		internalManager[i] = envoy.NewHTTPConnectionManager(internalRouteConfig[i].Name, cfg.Kourier)
+	}
 
-	// externalHTTPEnvoyListener, err := envoy.NewHTTPListener(externalManager, config.HTTPPortExternal, cfg.Kourier.EnableProxyProtocol)
-	externalHTTPEnvoyListener, err := envoy.NewHTTPListenerDual(externalManagerCloud, externalManagerEdge, config.HTTPPortExternal, cfg.Kourier.EnableProxyProtocol)
+	externalHTTPEnvoyListener, err := envoy.NewHTTPListenerDual(externalManager, config.HTTPPortExternal, cfg.Kourier.EnableProxyProtocol)
 	if err != nil { // False
-		// bonalib.Log("...", internalRouteConfigCloud)
-		// bonalib.Log("...", internalRouteConfigEdge)
-		// bonalib.Log("...", internalManagerCloud)
-		// bonalib.Log("...", internalManagerEdge)
 		return nil, nil, nil, err
 	}
 
-	// internalEnvoyListener, err := envoy.NewHTTPListener(internalManager, config.HTTPPortInternal, false)
-	internalEnvoyListener, err := envoy.NewHTTPListenerDual(internalManagerCloud, internalManagerEdge, config.HTTPPortInternal, false)
-	// internalEnvoyListenerCloud, err := envoy.NewHTTPListener(internalManagerCloud, config.HTTPPortInternal, false)
-	// internalEnvoyListenerEdge, err := envoy.NewHTTPListener(internalManagerEdge, config.HTTPPortInternal, false)
-	// bonalib.Log("internalEnvoyListener", internalEnvoyListener)
-	// bonalib.Log("internalManagerCloud", internalManagerCloud.GetRds().RouteConfigName)
+	internalEnvoyListener, err := envoy.NewHTTPListenerDual(internalManager, config.HTTPPortInternal, false)
 	if err != nil { // False
-		// bonalib.Log("...", internalEnvoyListener)
-		// bonalib.Log("...", internalEnvoyListenerCloud)
-		// bonalib.Log("...", internalEnvoyListenerEdge)
 		return nil, nil, nil, err
 	}
 
 	listeners := []cachetypes.Resource{externalHTTPEnvoyListener, internalEnvoyListener}
-	routes := []cachetypes.Resource{externalRouteConfigCloud, externalRouteConfigEdge, internalRouteConfigCloud, internalRouteConfigEdge}
-	// listeners := []cachetypes.Resource{externalHTTPEnvoyListener, internalEnvoyListener}
-	// routes := []cachetypes.Resource{externalRouteConfig, internalRouteConfig}
+	routes := []cachetypes.Resource{}
+	for i := 0; i < len(regions); i++ {
+		routes = append(routes, externalRouteConfig[i])
+		routes = append(routes, internalRouteConfig[i])
+	}
+
 	clusters := make([]cachetypes.Resource, 0, 1)
 
 	// create probe listeners
-	// probHTTPListener, err := envoy.NewHTTPListener(externalManagerCloud, config.HTTPPortProb, false)
-	probHTTPListener, err := envoy.NewHTTPListenerDual(externalManagerCloud, externalManagerEdge, config.HTTPPortProb, false)
+	probHTTPListener, err := envoy.NewHTTPListenerDual(externalManager, config.HTTPPortProb, false)
 	if err != nil { // False
 		return nil, nil, nil, err
 	}
@@ -331,7 +288,7 @@ func generateListenersAndRouteConfigsAndClusters(
 
 	// Add internal listeners and routes when internal cert secret is specified.
 	if cfg.Kourier.ClusterCertSecret != "" { // False
-		internalTLSRouteConfig := envoy.NewRouteConfig(internalTLSRouteConfigName, clusterLocalVirtualHostsCloud)
+		internalTLSRouteConfig := envoy.NewRouteConfig(internalTLSRouteConfigName[0], clusterLocalVirtualHosts[0])
 		internalTLSManager := envoy.NewHTTPConnectionManager(internalTLSRouteConfig.Name, cfg.Kourier)
 
 		internalHTTPSEnvoyListener, err := newInternalEnvoyListenerWithOneCert(
@@ -350,114 +307,74 @@ func generateListenersAndRouteConfigsAndClusters(
 	// Configure TLS Listener. If there's at least one ingress that contains the
 	// TLS field, that takes precedence. If there is not, TLS will be configured
 	// using a single cert for all the services if the creds are given via ENV.
-	if len(sniMatches) > 0 { // False
-		bonalib.Log("aaa", "")
-		externalHTTPSEnvoyListenerCloud, err := envoy.NewHTTPSListenerWithSNI(
-			externalTLSManagerCloud, config.HTTPSPortExternal,
-			sniMatches, cfg.Kourier,
-		)
-		if err != nil {
-			return nil, nil, nil, err
-		}
+	var externalHTTPSEnvoyListener, probHTTPSListener []*v3.Listener
+	var externalHTTPSEnvoyListenerWithOneCertFilterChain []*v3.FilterChain
 
-		externalHTTPSEnvoyListenerEdge, err := envoy.NewHTTPSListenerWithSNI(
-			externalTLSManagerEdge, config.HTTPSPortExternal,
-			sniMatches, cfg.Kourier,
-		)
-		if err != nil {
-			return nil, nil, nil, err
+	if len(sniMatches) > 0 { // False
+
+		for i := 0; i < len(regions); i++ {
+			externalHTTPSEnvoyListener[i], err = envoy.NewHTTPSListenerWithSNI(
+				externalTLSManager[i], config.HTTPSPortExternal,
+				sniMatches, cfg.Kourier,
+			)
+			if err != nil {
+				return nil, nil, nil, err
+			}
 		}
 
 		probeConfig := cfg.Kourier
 		probeConfig.EnableProxyProtocol = false // Disable proxy protocol for prober.
 
 		// create https prob listener with SNI
-		probHTTPSListenerCloud, err := envoy.NewHTTPSListenerWithSNI(
-			externalManagerCloud, config.HTTPSPortProb,
-			sniMatches, probeConfig,
-		)
-		if err != nil {
-			return nil, nil, nil, err
-		}
-
-		probHTTPSListenerEdge, err := envoy.NewHTTPSListenerWithSNI(
-			externalManagerEdge, config.HTTPSPortProb,
-			sniMatches, probeConfig,
-		)
-		if err != nil {
-			return nil, nil, nil, err
+		for i := 0; i < len(regions); i++ {
+			probHTTPSListener[i], err = envoy.NewHTTPSListenerWithSNI(
+				externalManager[i], config.HTTPSPortProb,
+				sniMatches, probeConfig,
+			)
+			if err != nil {
+				return nil, nil, nil, err
+			}
 		}
 
 		// if a certificate is configured, add a new filter chain to TLS listener
 		if useHTTPSListenerWithOneCert() {
-			externalHTTPSEnvoyListenerWithOneCertFilterChainCloud, err := newExternalEnvoyListenerWithOneCertFilterChain(
-				ctx, externalTLSManagerCloud, kubeclient, cfg.Kourier,
-			)
-			if err != nil {
-				return nil, nil, nil, err
-			}
 
-			externalHTTPSEnvoyListenerWithOneCertFilterChainEdge, err := newExternalEnvoyListenerWithOneCertFilterChain(
-				ctx, externalTLSManagerEdge, kubeclient, cfg.Kourier,
-			)
-			if err != nil {
-				return nil, nil, nil, err
+			for i := 0; i < len(regions); i++ {
+				externalHTTPSEnvoyListenerWithOneCertFilterChain[i], err = newExternalEnvoyListenerWithOneCertFilterChain(
+					ctx, externalTLSManager[i], kubeclient, cfg.Kourier,
+				)
+				if err != nil {
+					return nil, nil, nil, err
+				}
+				externalHTTPSEnvoyListener[i].FilterChains = append(externalHTTPSEnvoyListener[i].FilterChains,
+					externalHTTPSEnvoyListenerWithOneCertFilterChain[i])
+				probHTTPSListener[i].FilterChains = append(probHTTPSListener[i].FilterChains,
+					externalHTTPSEnvoyListenerWithOneCertFilterChain[i])
 			}
-
-			// externalHTTPSEnvoyListener.FilterChains = append(externalHTTPSEnvoyListener.FilterChains,
-			// 	externalHTTPSEnvoyListenerWithOneCertFilterChain)
-			externalHTTPSEnvoyListenerCloud.FilterChains = append(externalHTTPSEnvoyListenerCloud.FilterChains,
-				externalHTTPSEnvoyListenerWithOneCertFilterChainCloud)
-			externalHTTPSEnvoyListenerEdge.FilterChains = append(externalHTTPSEnvoyListenerEdge.FilterChains,
-				externalHTTPSEnvoyListenerWithOneCertFilterChainEdge)
-			// probHTTPSListener.FilterChains = append(probHTTPSListener.FilterChains,
-			// 	externalHTTPSEnvoyListenerWithOneCertFilterChain)
-			probHTTPSListenerCloud.FilterChains = append(probHTTPSListenerCloud.FilterChains,
-				externalHTTPSEnvoyListenerWithOneCertFilterChainCloud)
-			probHTTPSListenerEdge.FilterChains = append(probHTTPSListenerEdge.FilterChains,
-				externalHTTPSEnvoyListenerWithOneCertFilterChainEdge)
 		}
 
-		// listeners = append(listeners, externalHTTPSEnvoyListener, probHTTPSListener)
-		listeners = append(listeners, externalHTTPSEnvoyListenerCloud, probHTTPSListenerCloud)
-		listeners = append(listeners, externalHTTPSEnvoyListenerEdge, probHTTPSListenerEdge)
-		// routes = append(routes, externalTLSRouteConfig)
-		routes = append(routes, externalTLSRouteConfigCloud)
-		routes = append(routes, externalTLSRouteConfigEdge)
+		for i := 0; i < len(regions); i++ {
+			listeners = append(listeners, externalHTTPSEnvoyListener[i], probHTTPSListener[i])
+			routes = append(routes, externalTLSRouteConfig[i])
+		}
 	} else if useHTTPSListenerWithOneCert() { // False
-		externalHTTPSEnvoyListenerCloud, err := newExternalEnvoyListenerWithOneCert(
-			ctx, externalTLSManagerCloud, kubeclient,
-			cfg.Kourier,
-		)
-		if err != nil {
-			return nil, nil, nil, err
-		}
+		for i := 0; i < len(regions); i++ {
+			externalHTTPSEnvoyListener[i], err = newExternalEnvoyListenerWithOneCert(
+				ctx, externalTLSManager[i], kubeclient,
+				cfg.Kourier,
+			)
+			if err != nil {
+				return nil, nil, nil, err
+			}
 
-		externalHTTPSEnvoyListenerEdge, err := newExternalEnvoyListenerWithOneCert(
-			ctx, externalTLSManagerEdge, kubeclient,
-			cfg.Kourier,
-		)
-		if err != nil {
-			return nil, nil, nil, err
-		}
+			probHTTPSListener[i], err = envoy.NewHTTPSListener(config.HTTPSPortProb, externalHTTPSEnvoyListener[i].FilterChains, false)
+			if err != nil {
+				return nil, nil, nil, err
+			}
 
-		// create https prob listener
-		probHTTPSListenerCloud, err := envoy.NewHTTPSListener(config.HTTPSPortProb, externalHTTPSEnvoyListenerCloud.FilterChains, false)
-		if err != nil {
-			return nil, nil, nil, err
+			listeners = append(listeners, externalHTTPSEnvoyListener[i], probHTTPSListener[i])
+			routes = append(routes, externalTLSRouteConfig[i])
 		}
-
-		probHTTPSListenerEdge, err := envoy.NewHTTPSListener(config.HTTPSPortProb, externalHTTPSEnvoyListenerEdge.FilterChains, false)
-		if err != nil {
-			return nil, nil, nil, err
-		}
-
-		// listeners = append(listeners, externalHTTPSEnvoyListener, probHTTPSListener)
-		listeners = append(listeners, externalHTTPSEnvoyListenerCloud, probHTTPSListenerCloud)
-		listeners = append(listeners, externalHTTPSEnvoyListenerEdge, probHTTPSListenerEdge)
-		// routes = append(routes, externalTLSRouteConfig)
-		routes = append(routes, externalTLSRouteConfigCloud)
-		routes = append(routes, externalTLSRouteConfigEdge)
 	}
 
 	if cfg.Kourier.Tracing.Enabled { // False

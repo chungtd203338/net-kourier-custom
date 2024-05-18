@@ -21,12 +21,10 @@ import (
 
 	envoyclusterv3 "github.com/envoyproxy/go-control-plane/envoy/config/cluster/v3"
 	envoycorev3 "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
-
 	endpoint "github.com/envoyproxy/go-control-plane/envoy/config/endpoint/v3"
 	httpOptions "github.com/envoyproxy/go-control-plane/envoy/extensions/upstreams/http/v3"
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/durationpb"
-	// "log"
 	"knative.dev/net-kourier/pkg/bonalib"
 )
 
@@ -39,7 +37,6 @@ func NewCluster(
 	endpoints []*endpoint.LbEndpoint,
 	isHTTP2 bool, transportSocket *envoycorev3.TransportSocket,
 	discoveryType envoyclusterv3.Cluster_DiscoveryType) *envoyclusterv3.Cluster {
-	
 	// rand := bonalib.RandNumber()
 	// log.Printf("0---start %v envoy.api.cluster.NewCluster", rand)
 
@@ -71,7 +68,7 @@ func NewCluster(
 			"envoy.extensions.upstreams.http.v3.HttpProtocolOptions": opts,
 		}
 	}
-	
+
 	// bonalib.Log("cluster", cluster)
 
 	return cluster

@@ -30,14 +30,14 @@ fi
 echo -e "\n"
 message="change image from docker to crictl" && logInfo
 image=$(docker images | grep ko.local | grep kourier | grep latest | awk '{print $1}'):latest
-docker rmi -f daohiep22/watashino-kourier:latest
-docker image tag $image docker.io/daohiep22/watashino-kourier:latest
+docker rmi -f chung123abc/watashino-kourier:latest
+docker image tag $image docker.io/chung123abc/watashino-kourier:latest
 docker rmi $image
 image=$(docker images | grep ko.local | grep kourier | awk '{print $1}'):$(docker images | grep ko.local | grep kourier | awk '{print $2}')
 docker rmi $image
-docker save -o watashino-kourier.tar docker.io/daohiep22/watashino-kourier:latest
+docker save -o watashino-kourier.tar docker.io/chung123abc/watashino-kourier:latest
 message="Saved atarashi-imeji to .tar file" && logSuccess
-sudo crictl rmi docker.io/daohiep22/watashino-kourier:latest
+sudo crictl rmi docker.io/chung123abc/watashino-kourier:latest
 sudo ctr -n=k8s.io images import watashino-kourier.tar
 message="Untar atarashi-imeji" && logSuccess
 rm -rf watashino-kourier.tar

@@ -13,7 +13,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
-
+// abc
 package envoy
 
 import (
@@ -41,14 +41,6 @@ func NewRoute(name string,
 	headers map[string]string,
 	hostRewrite string,
 	region ...string) *route.Route {
-
-	// var _region string
-	// if len(region) == 0 {
-	// 	_region = ""
-	// } else {
-	// 	_region = region[0]
-	// }
-
 	routeAction := &route.RouteAction{
 		ClusterSpecifier: &route.RouteAction_WeightedClusters{
 			WeightedClusters: &route.WeightedCluster{

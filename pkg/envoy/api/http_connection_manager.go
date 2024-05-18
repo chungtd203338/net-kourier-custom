@@ -128,6 +128,7 @@ func NewHTTPConnectionManager(routeConfigName string, kourierConfig *config.Kour
 }
 
 // NewRouteConfig create a new RouteConfiguration with the given name and hosts.
+// route_config
 func NewRouteConfig(name string, virtualHosts []*route.VirtualHost) *route.RouteConfiguration {
 	return &route.RouteConfiguration{
 		Name:         name,

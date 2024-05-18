@@ -38,7 +38,7 @@ func UpdateInfoForIngress(ctx context.Context, caches *Caches, ing *v1alpha1.Ing
 	}
 
 	ingressTranslation, err := translator.translateIngress(ctx, ing, extAuthzEnabled)
-	// bonalib.Log("ingressTranslation", len(ingressTranslation.clusters))
+	// bonalib.Log("ingressTranslation", ingressTranslation.clusters[0].LoadAssignment)
 	if err != nil {
 		return fmt.Errorf("failed to translate ingress: %w", err)
 	}
@@ -46,6 +46,5 @@ func UpdateInfoForIngress(ctx context.Context, caches *Caches, ing *v1alpha1.Ing
 	if ingressTranslation == nil {
 		return nil
 	}
-	
 	return caches.UpdateIngress(ctx, ingressTranslation) // bonalog: nil
 }

@@ -21,7 +21,6 @@ import (
 
 	core "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	endpoint "github.com/envoyproxy/go-control-plane/envoy/config/endpoint/v3"
-
 	"knative.dev/net-kourier/pkg/bonalib"
 )
 
@@ -52,7 +51,7 @@ func NewLBEndpoint(ip string, port uint32) *endpoint.LbEndpoint {
 
 	// bonalib.Log(ip)
 	// bonalib.Log(port)
-	// bonalib.Log("result", result)
+	// bonalib.Log("NewLBEndpoint", result)
 
 	return result
 }
