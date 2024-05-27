@@ -149,7 +149,6 @@ func (translator *IngressTranslator) translateIngress(ctx context.Context, ingre
 			wrs := make([][]*route.WeightedCluster_ClusterWeight, len(regions)+1)
 
 			for _, split := range httpPath.Splits { // loop 1 time
-				// bonalib.Log("split", split)
 				// The FQN of the service is sufficient here, as clusters towards the
 				// same service are supposed to be deduplicated anyway.
 				splitName := fmt.Sprintf("%s/%s", split.ServiceNamespace, split.ServiceName)

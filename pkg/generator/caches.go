@@ -50,6 +50,10 @@ const (
 	envCertsSecretName      = "CERTS_SECRET_NAME"
 	certFieldInSecret       = "tls.crt"
 	keyFieldInSecret        = "tls.key"
+	// externalRouteConfigName    = "external_services"
+	// externalTLSRouteConfigName = "external_tls_services"
+	// internalRouteConfigName    = "internal_services"
+	// internalTLSRouteConfigName = "internal_tls_services"
 )
 
 // ErrDomainConflict is an error produces when two ingresses have conflicting domains.
@@ -97,7 +101,6 @@ func (caches *Caches) validateIngress(translatedIngress *translatedIngress) erro
 			}
 		}
 	}
-
 	return nil
 }
 
@@ -152,9 +155,10 @@ func (caches *Caches) ToEnvoySnapshot(ctx context.Context) (*cache.Snapshot, err
 			localVHosts[i] = append(localVHosts[i], translatedIngress.internalVirtualHostsTest[i]...)
 			externalVHosts[i] = append(externalVHosts[i], translatedIngress.externalVirtualHostsTest[i]...)
 			externalTLSVHosts[i] = append(externalTLSVHosts[i], translatedIngress.externalTLSVirtualHostsTest[i]...)
-			for _, match := range translatedIngress.sniMatches {
-				snis.consume(match)
-			}
+
+		}
+		for _, match := range translatedIngress.sniMatches {
+			snis.consume(match)
 		}
 	}
 

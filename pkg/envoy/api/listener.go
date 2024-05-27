@@ -32,6 +32,7 @@ import (
 
 	_ "net/http/pprof"
 
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 
@@ -93,158 +94,6 @@ type SNIMatch struct {
 	PrivateKey       []byte
 }
 
-// NewHTTPListener creates a new Listener at the given port, backed by the given manager.
-// func NewHTTPListener(manager *hcm.HttpConnectionManager, port uint32, enableProxyProtocol bool) (*listener.Listener, error) {
-// 	filters_cloud, err_cloud := createFilters(manager)
-// 	if err_cloud != nil {
-// 		return nil, err_cloud
-// 	}
-
-// 	filters_edge, err_edge := createFilters(manager)
-// 	if err_edge != nil {
-// 		return nil, err_edge
-// 	}
-
-// 	var listenerFilter []*listener.ListenerFilter // bonalog: <nil>
-// 	if enableProxyProtocol {
-// 		proxyProtocolListenerFilter, err := createProxyProtocolListenerFilter()
-// 		if err != nil {
-// 			return nil, err
-// 		}
-// 		listenerFilter = append(listenerFilter, proxyProtocolListenerFilter)
-// 	}
-
-// 	// -------------- get API K8s cluster------------------------------------
-
-// 	home := homedir.HomeDir()
-// 	config, err := clientcmd.BuildConfigFromFlags("", filepath.Join(home, ".kube", "config"))
-// 	// creates the in-cluster config
-// 	// config, err := rest.InClusterConfig()
-// 	if err != nil {
-// 		panic(err.Error())
-// 	}
-// 	// creates the clientset
-// 	clientset, err := kubernetes.NewForConfig(config)
-// 	if err != nil {
-// 		panic(err.Error())
-// 	}
-// 	nodes, err := clientset.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{})
-// 	if err != nil {
-// 		panic(err)
-// 	}
-
-// 	pods, err := clientset.CoreV1().Pods("kourier-system").List(context.TODO(), metav1.ListOptions{})
-// 	if err != nil {
-// 		panic(err)
-// 	}
-
-// 	// get nodes IP in cloud region
-// 	nodeIpCloud := []corev1.NodeAddress{}
-// 	var numberNodesCloud = 0
-// 	for i := 0; i < len(nodes.Items); i++ {
-// 		if nodes.Items[i].Name == "master" {
-// 			numberNodesCloud = numberNodesCloud + 1
-// 			nodeIpCloud = nodes.Items[i].Status.Addresses
-// 		}
-// 	}
-// 	// -------------------------------------
-
-// 	// get pod Gateway IP in cloud region
-// 	podIPCloud := []corev1.PodIP{}
-// 	var numberPodsGatewayCloud = 0
-// 	for i := 0; i < len(pods.Items); i++ {
-// 		if pods.Items[i].Spec.NodeName == "master" {
-// 			numberPodsGatewayCloud = numberPodsGatewayCloud + 1
-// 			podIPCloud = append(podIPCloud, corev1.PodIP{pods.Items[i].Status.PodIP})
-// 		}
-// 	}
-// 	// --------------------------------------------------
-
-// 	filterChainMatch_cloud := &listener.FilterChainMatch{
-// 		SourceType:         0,
-// 		SourcePrefixRanges: []*core.CidrRange{},
-// 	}
-// 	//-----------filterChainMatch_cloud append nodes in cloud region----------------
-// 	for i := 0; i < numberNodesCloud; i++ {
-// 		filterChainMatch_cloud.SourcePrefixRanges = append(filterChainMatch_cloud.SourcePrefixRanges, &core.CidrRange{
-// 			AddressPrefix: nodeIpCloud[i].Address,
-// 			PrefixLen:     wrapperspb.UInt32(32),
-// 		})
-// 	}
-
-// 	//-----------filterChainMatch_cloud append gatewap podIP in cloud region----------------
-// 	for i := 0; i < numberPodsGatewayCloud; i++ {
-// 		filterChainMatch_cloud.SourcePrefixRanges = append(filterChainMatch_cloud.SourcePrefixRanges, &core.CidrRange{
-// 			AddressPrefix: podIPCloud[i].IP,
-// 			PrefixLen:     wrapperspb.UInt32(24),
-// 		})
-// 	}
-
-// 	// ==========================================================================================================
-
-// 	// get nodes IP in edge region
-// 	nodeIpEdge := []corev1.NodeAddress{}
-// 	var numberNodesEdge = 0
-// 	for i := 0; i < len(nodes.Items); i++ {
-// 		if nodes.Items[i].Name == "worker1" {
-// 			numberNodesEdge = numberNodesEdge + 1
-// 			nodeIpEdge = nodes.Items[i].Status.Addresses
-// 		}
-// 	}
-// 	// -------------------------------------
-
-// 	// get pod Gateway IP in edge region
-// 	podIPEdge := []corev1.PodIP{}
-// 	var numberPodsGatewayEdge = 0
-// 	for i := 0; i < len(pods.Items); i++ {
-// 		if pods.Items[i].Spec.NodeName == "worker1" {
-// 			numberPodsGatewayEdge = numberPodsGatewayEdge + 1
-// 			podIPEdge = append(podIPEdge, corev1.PodIP{pods.Items[i].Status.PodIP})
-// 		}
-// 	}
-// 	// --------------------------------------------------
-
-// 	filterChainMatch_edge := &listener.FilterChainMatch{
-// 		SourceType:         0,
-// 		SourcePrefixRanges: []*core.CidrRange{},
-// 	}
-// 	//-----------filterChainMatch_edge append nodes in cloud region----------------
-// 	for i := 0; i < numberNodesEdge; i++ {
-// 		filterChainMatch_edge.SourcePrefixRanges = append(filterChainMatch_edge.SourcePrefixRanges, &core.CidrRange{
-// 			AddressPrefix: nodeIpEdge[i].Address,
-// 			PrefixLen:     wrapperspb.UInt32(32),
-// 		})
-// 	}
-
-// 	//-----------filterChainMatch_edge append gatewap podIP in cloud region----------------
-// 	for i := 0; i < numberPodsGatewayEdge; i++ {
-// 		filterChainMatch_edge.SourcePrefixRanges = append(filterChainMatch_edge.SourcePrefixRanges, &core.CidrRange{
-// 			AddressPrefix: podIPEdge[i].IP,
-// 			PrefixLen:     wrapperspb.UInt32(24),
-// 		})
-// 	}
-
-// 	_listener := &listener.Listener{
-// 		Name:            CreateListenerName(port),
-// 		Address:         createAddress(port),
-// 		ListenerFilters: listenerFilter,
-// 		FilterChains: []*listener.FilterChain{
-// 			{
-// 				FilterChainMatch: filterChainMatch_cloud,
-// 				Filters:          filters_cloud,
-// 			},
-// 			{
-// 				FilterChainMatch: filterChainMatch_edge,
-// 				Filters:          filters_edge,
-// 			},
-// 		},
-// 	}
-
-// 	// bonalib.Log("listener not dual", _listener)
-
-// 	return _listener, nil
-// }
-
 func NewHTTPListenerDual(manager []*hcm.HttpConnectionManager, port uint32, enableProxyProtocol bool) (*listener.Listener, error) {
 	// var filters [][]*listener.Filter
 	filters := make([][]*listener.Filter, len(regions)+1)
@@ -279,13 +128,12 @@ func NewHTTPListenerDual(manager []*hcm.HttpConnectionManager, port uint32, enab
 		panic(err.Error())
 	}
 
-	// get nodes IP in cloud region
-	// nodes, err := clientset.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{})
-	// if err != nil {
-	// 	panic(err)
-	// }
+	nodes, err := clientset.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{})
+	if err != nil {
+		panic(err)
+	}
+	nodeip := []corev1.NodeAddress{}
 
-	// nodeip := []corev1.NodeAddress{}
 	var ipamBlockList IPAMBlockList
 	filterChainMatch := make([]*listener.FilterChainMatch, len(regions)+1)
 
@@ -304,19 +152,19 @@ func NewHTTPListenerDual(manager []*hcm.HttpConnectionManager, port uint32, enab
 		}
 		for key, value := range regions[i] {
 			if key == "label" {
-				// var numberNodes = 0
-				// for j := 0; j < len(nodes.Items); j++ {
-				// 	if nodes.Items[j].Name == value {
-				// 		numberNodes = numberNodes + 1
-				// 		nodeip = nodes.Items[j].Status.Addresses
-				// 	}
-				// }
-				// for k := 0; k < numberNodes; k++ {
-				// 	filterChainMatch[i].SourcePrefixRanges = append(filterChainMatch[i].SourcePrefixRanges, &core.CidrRange{
-				// 		AddressPrefix: nodeip[k].Address,
-				// 		PrefixLen:     wrapperspb.UInt32(32),
-				// 	})
-				// }
+				var numberNodes = 0
+				for j := 0; j < len(nodes.Items); j++ {
+					if nodes.Items[j].Name == value {
+						numberNodes = numberNodes + 1
+						nodeip = nodes.Items[j].Status.Addresses
+					}
+				}
+				for k := 0; k < numberNodes; k++ {
+					filterChainMatch[i].SourcePrefixRanges = append(filterChainMatch[i].SourcePrefixRanges, &core.CidrRange{
+						AddressPrefix: nodeip[k].Address,
+						PrefixLen:     wrapperspb.UInt32(32),
+					})
+				}
 				for _, item := range ipamBlockList.Items {
 					if item.Spec.Affinity != nil && strings.Contains(*item.Spec.Affinity, value) {
 						ip, ipNet, err := net.ParseCIDR(item.Spec.CIDR)
@@ -334,18 +182,18 @@ func NewHTTPListenerDual(manager []*hcm.HttpConnectionManager, port uint32, enab
 		}
 	}
 
-	filterChainMatch[0].SourcePrefixRanges = append(filterChainMatch[0].SourcePrefixRanges, &core.CidrRange{
-		AddressPrefix: "192.168.122.50",
-		PrefixLen:     wrapperspb.UInt32(32),
-	})
-	filterChainMatch[1].SourcePrefixRanges = append(filterChainMatch[1].SourcePrefixRanges, &core.CidrRange{
-		AddressPrefix: "192.168.122.51",
-		PrefixLen:     wrapperspb.UInt32(32),
-	})
-	filterChainMatch[2].SourcePrefixRanges = append(filterChainMatch[2].SourcePrefixRanges, &core.CidrRange{
-		AddressPrefix: "192.168.122.52",
-		PrefixLen:     wrapperspb.UInt32(32),
-	})
+	// filterChainMatch[0].SourcePrefixRanges = append(filterChainMatch[0].SourcePrefixRanges, &core.CidrRange{
+	// 	AddressPrefix: "192.168.122.50",
+	// 	PrefixLen:     wrapperspb.UInt32(32),
+	// })
+	// filterChainMatch[1].SourcePrefixRanges = append(filterChainMatch[1].SourcePrefixRanges, &core.CidrRange{
+	// 	AddressPrefix: "192.168.122.51",
+	// 	PrefixLen:     wrapperspb.UInt32(32),
+	// })
+	// filterChainMatch[2].SourcePrefixRanges = append(filterChainMatch[2].SourcePrefixRanges, &core.CidrRange{
+	// 	AddressPrefix: "192.168.122.52",
+	// 	PrefixLen:     wrapperspb.UInt32(32),
+	// })
 
 	_listener := &listener.Listener{
 		Name:            CreateListenerName(port),
@@ -361,7 +209,7 @@ func NewHTTPListenerDual(manager []*hcm.HttpConnectionManager, port uint32, enab
 		})
 	}
 
-	// bonalib.Log("listener dual", _listener)
+	bonalib.Log("listener dual", _listener)
 
 	return _listener, nil
 }

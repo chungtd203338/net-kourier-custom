@@ -92,7 +92,7 @@ elif [ $OPTION == "ful" ]; then
     koBuild
     if [ $? -eq "0" ]; then
         convertImage
-        deployNewVersion
+        # deployNewVersion
         # logPod
     else
         exit 1

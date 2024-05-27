@@ -73,7 +73,6 @@ var isKourierIngress = reconciler.AnnotationFilterFunc(
 func NewController(ctx context.Context, cmw configmap.Watcher) *controller.Impl {
 	// bonalib.Log("NewController", "")
 	logger := logging.FromContext(ctx)
-
 	kubernetesClient := kubeclient.Get(ctx)
 	knativeClient := knativeclient.Get(ctx)
 	ingressInformer := ingressinformer.Get(ctx)
@@ -171,7 +170,6 @@ func NewController(ctx context.Context, cmw configmap.Watcher) *controller.Impl 
 		})
 	r.statusManager = statusProber
 	statusProber.Start(ctx.Done())
-
 	r.caches.SetOnEvicted(func(key types.NamespacedName, value interface{}) {
 		logger.Debug("Evicted", key.String())
 		// We enqueue the ingress name and namespace as if it was a new event, to force
@@ -204,7 +202,7 @@ func NewController(ctx context.Context, cmw configmap.Watcher) *controller.Impl 
 
 	// Get the current list of ingresses that are ready and seed the Envoy config with them.
 	ingressesToSync, err := getReadyIngresses(ctx, knativeClient.NetworkingV1alpha1()) // bonalog: list of 3scales
-	if err != nil { // bonalog: False
+	if err != nil {                                                                    // bonalog: False
 		logger.Fatalw("Failed to fetch ready ingresses", zap.Error(err))
 	}
 	logger.Infof("Priming the config with %d ingresses", len(ingressesToSync))
@@ -344,7 +342,6 @@ func readyAddresses(eps *corev1.Endpoints) sets.String {
 			ready.Insert(address.IP)
 		}
 	}
-
 	return ready
 }
 

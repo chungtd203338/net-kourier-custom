@@ -22,6 +22,7 @@ import (
 	"fmt"
 
 	"k8s.io/apimachinery/pkg/types"
+	"knative.dev/net-kourier/pkg/bonalib"
 	"knative.dev/net-kourier/pkg/config"
 	envoy "knative.dev/net-kourier/pkg/envoy/server"
 	"knative.dev/net-kourier/pkg/generator"
@@ -30,7 +31,6 @@ import (
 	"knative.dev/networking/pkg/status"
 	"knative.dev/pkg/logging"
 	"knative.dev/pkg/reconciler"
-	"knative.dev/net-kourier/pkg/bonalib"
 )
 
 var _ = bonalib.Baka()
@@ -160,7 +160,6 @@ func (r *Reconciler) updateIngress(ctx context.Context, ingress *v1alpha1.Ingres
 func (r *Reconciler) updateEnvoyConfig(ctx context.Context) error {
 	logger := logging.FromContext(ctx)
 	logger.Debugf("Preparing Envoy Snapshot")
-
 	newSnapshot, err := r.caches.ToEnvoySnapshot(ctx)
 	if err != nil {
 		return err
